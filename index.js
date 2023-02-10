@@ -1,21 +1,56 @@
-const core = require('@actions/core');
-const wait = require('./wait');
+const fs = require('fs')
+const YAML = require('yaml')
+const core = require('@actions/core')
 
+const cliConfigPath = `${process.env.HOME}/.jira.d/config.yml`
+const configPath = `${process.env.HOME}/jira/config.yml`
+const Action = require('./action')
 
-// most @actions toolkit packages have async methods
-async function run() {
+// eslint-disable-next-line import/no-dynamic-require
+const githubEvent = require(process.env.GITHUB_EVENT_PATH)
+const config = YAML.parse(fs.readFileSync(configPath, 'utf8'))
+
+async function exec () {
   try {
-    const ms = core.getInput('milliseconds');
-    core.info(`Waiting ${ms} milliseconds ...`);
+    const result = await new Action({
+      githubEvent,
+      argv: parseArgs(),
+      config,
+    }).execute()
 
-    core.debug((new Date()).toTimeString()); // debug is only output if you set the secret `ACTIONS_RUNNER_DEBUG` to true
-    await wait(parseInt(ms));
-    core.info((new Date()).toTimeString());
+    if (result) {
+      // result.issue is the issue key
+      console.log(`Created issue: ${result.issue}`)
+      console.log(`Saving ${result.issue} to ${cliConfigPath}`)
+      console.log(`Saving ${result.issue} to ${configPath}`)
 
-    core.setOutput('time', new Date().toTimeString());
+      // Expose created issue's key as an output
+      core.setOutput('issue', result.issue)
+
+      const yamledResult = YAML.stringify(result)
+      const extendedConfig = Object.assign({}, config, result)
+
+      fs.writeFileSync(configPath, YAML.stringify(extendedConfig))
+
+      return fs.appendFileSync(cliConfigPath, yamledResult)
+    }
+
+    console.log('Failed to create issue.')
+    process.exit(78)
   } catch (error) {
-    core.setFailed(error.message);
+    console.error(error)
+    process.exit(1)
   }
 }
 
-run();
+function parseArgs () {
+  return {
+    project: core.getInput('project'),
+    issuetype: core.getInput('issuetype'),
+    summary: core.getInput('summary'),
+    description: core.getInput('description'),
+    fields: core.getInput('fields'),
+  }
+}
+
+exec()
