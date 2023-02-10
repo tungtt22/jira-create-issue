@@ -49,6 +49,7 @@ function parseArgs () {
     issuetype: core.getInput('issuetype'),
     summary: core.getInput('summary'),
     description: core.getInput('description'),
+    labels: core.getInput('labels'),
     fields: core.getInput('fields'),
   }
 }
