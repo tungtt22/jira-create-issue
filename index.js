@@ -6,7 +6,6 @@ const cliConfigPath = `${process.env.HOME}/.jira.d/config.yml`
 const configPath = `${process.env.HOME}/jira/config.yml`
 const Action = require('./action')
 
-// eslint-disable-next-line import/no-dynamic-require
 const githubEvent = require(process.env.GITHUB_EVENT_PATH)
 const config = YAML.parse(fs.readFileSync(configPath, 'utf8'))
 
@@ -50,6 +49,7 @@ function parseArgs () {
     summary: core.getInput('summary'),
     description: core.getInput('description'),
     labels: core.getInput('labels'),
+    attachments: core.getInput('attachments'),
     fields: core.getInput('fields'),
   }
 }
