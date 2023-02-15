@@ -1,34 +1,34 @@
-const fetch = require('node-fetch')
+const fetch = require("node-fetch");
 
-module.exports = serviceName => async (state, apiMethod = 'unknown') => {
-  // const startTime = moment.now()
+module.exports =
+	(serviceName) =>
+	async (state, apiMethod = "unknown") => {
+		const response = await fetch(state.req.url, state.req);
+    console.log(state.req)
+		state.res = {
+			headers: response.headers?.raw(),
+			status: response.status,
+		};
 
-  const response = await fetch(state.req.url, state.req)
+		// const tags = {
+		//   api_method: apiMethod,
+		//   method: state.req.method || 'GET',
+		//   response_code: response.status,
+		//   service: serviceName,
+		// }
 
-  state.res = {
-    headers: response.headers.raw(),
-    status: response.status,
-  }
+		state.res.body = await response.text();
 
-  // const totalTime = moment.now() - startTime
-  // const tags = {
-  //   api_method: apiMethod,
-  //   method: state.req.method || 'GET',
-  //   response_code: response.status,
-  //   service: serviceName,
-  // }
+		const isJSON = (response.headers.get("content-type") || "").includes(
+			"application/json"
+		);
 
-  state.res.body = await response.text()
+		if (isJSON && state.res.body) {
+			state.res.body = JSON.parse(state.res.body);
+		}
 
-  const isJSON = (response.headers.get('content-type') || '').includes('application/json')
-
-  if (isJSON && state.res.body) {
-    state.res.body = JSON.parse(state.res.body)
-  }
-
-  if (!response.ok) {
-    throw new Error(response.statusText)
-  }
-
-  return state
-}
+		if (!response.ok) {
+			throw new Error(response.statusText);
+		}
+		return state;
+	};

@@ -18,82 +18,103 @@ module.exports = class {
 		const projectKey = argv.project;
 		const issuetypeName = argv.issuetype;
 
-		// map custom fields
-		const { projects } = await this.Jira.getCreateMeta({
-			expand: "projects.issuetypes.fields",
-			projectKeys: projectKey,
-			issuetypeNames: issuetypeName,
-		});
-
-		if (projects.length === 0) {
-			console.error(`project '${projectKey}' not found`);
-
-			return;
+		const issueKey = await this.checkIssueExist(argv.summary, projectKey);
+		let attachments = [];
+		if (argv.attachments) {
+			attachments = argv.attachments.split(",");
 		}
 
-		const [project] = projects;
-
-		if (project.issuetypes.length === 0) {
-			console.error(`issuetype '${issuetypeName}' not found`);
-
-			return;
-		}
-
-		let providedFields = [
-			{
-				key: "project",
-				value: {
-					key: projectKey,
-				},
-			},
-			{
-				key: "issuetype",
-				value: {
-					name: issuetypeName,
-				},
-			},
-			{
-				key: "summary",
-				value: argv.summary,
-			},
-		];
-
-		if (argv.description) {
-			providedFields.push({
-				key: "description",
-				value: argv.description,
+		if (issueKey === null) {
+			// map custom fields
+			const { projects } = await this.Jira.getCreateMeta({
+				expand: "projects.issuetypes.fields",
+				projectKeys: projectKey,
+				issuetypeNames: issuetypeName,
 			});
-		}
 
-		if (argv.labels) {
-			const labels = argv.labels.split(",");
-			providedFields.push({
-				key: "labels",
-				value: labels,
-			});
-		}
+			if (projects.length === 0) {
+				console.error(`project '${projectKey}' not found`);
 
-		if (argv.fields) {
-			providedFields = [
-				...providedFields,
-				...this.transformFields(argv.fields),
-			];
-		}
-
-		const payload = providedFields.reduce(
-			(acc, field) => {
-				acc.fields[field.key] = field.value;
-
-				return acc;
-			},
-			{
-				fields: {},
+				return;
 			}
-		);
 
-		const issue = await this.Jira.createIssue(payload);
+			const [project] = projects;
 
-		return { issue: issue.key };
+			if (project.issuetypes.length === 0) {
+				console.error(`issuetype '${issuetypeName}' not found`);
+
+				return;
+			}
+
+			let providedFields = [
+				{
+					key: "project",
+					value: {
+						key: projectKey,
+					},
+				},
+				{
+					key: "issuetype",
+					value: {
+						name: issuetypeName,
+					},
+				},
+				{
+					key: "summary",
+					value: argv.summary,
+				},
+			];
+
+			if (argv.description) {
+				providedFields.push({
+					key: "description",
+					value: argv.description,
+				});
+			}
+
+			if (argv.labels) {
+				const labels = argv.labels.split(",");
+				providedFields.push({
+					key: "labels",
+					value: labels,
+				});
+			}
+
+			if (argv.fields) {
+				providedFields = [
+					...providedFields,
+					...this.transformFields(argv.fields),
+				];
+			}
+
+			const payload = providedFields.reduce(
+				(acc, field) => {
+					acc.fields[field.key] = field.value;
+
+					return acc;
+				},
+				{
+					fields: {},
+				}
+			);
+
+			console.log(`Create new issue: \n${argv.summary}`);
+			const issue = await this.Jira.createIssue(payload);
+
+			console.log(`Adding comment to ${issue.key}: \n${argv.comment}`);
+			await this.Jira.addComment(issue.key, { body: argv.comment });
+
+			console.log(`attach files to issue ${issueKey}`);
+			await this.attachmentFiles(issueKey, attachments);
+
+			return { issue: issue.key };
+		} else {
+			console.log(`Adding comment to ${issueKey}: "${argv.comment}"`);
+			await this.Jira.addComment(issueKey, { body: argv.comment });
+
+			console.log(`attach files to issue ${issueKey}`);
+			await this.attachmentFiles(issueKey, attachments);
+		}
 	}
 
 	transformFields(fieldsString) {
@@ -103,5 +124,22 @@ module.exports = class {
 			key: fieldKey,
 			value: fields[fieldKey],
 		}));
+	}
+
+	async checkIssueExist(summary, projectKey) {
+		const listIssue = await this.Jira.searchIssue(summary, projectKey);
+
+		for (const issue of listIssue.issues) {
+			if (summary === issue.fields.summary) {
+				return issue.key;
+			}
+		}
+		return null;
+	}
+
+	async attachmentFiles(issueKey, attachments) {
+		const files = await this.Jira.addIssueAttachments(issueKey, attachments);
+		console.log(files);
+		return files;
 	}
 };
